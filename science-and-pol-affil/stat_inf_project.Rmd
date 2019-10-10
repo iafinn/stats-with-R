@@ -1,0 +1,197 @@
+---
+title: "Confidence in the scientific community and political affiliation"
+author: Ian Finneran
+output:
+  github_document:
+    pandoc_args: --webtex
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(tidyr)
+library(MASS)
+```
+
+### Load data
+
+
+```{r load-data}
+load("gss.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+[The General Social Survey (GSS)](http://gss.norc.org/) covers US attitudes and perspectives about topics including society, institutions, race relations, federal spending, crime, and religion. Samples were collected annually from 1972 to 1993 and biannually in even number years from 1994 to 2018 by the National Opinion Research Center at the University of Chicago (funded by the National Science Foundation). Samples were chosen randomly from US households, so they can be generalized to the US population as a whole. The sample size is roughly 1500 for each survey (ranging from 1372 to 1613). Since it is an observational survey, association can be measured. Causation cannot be measured, as respondents were not randomly assigned. 
+
+* * *
+
+## Part 2: Research question
+
+Were the political affiliations of Americans (liberal, conservative, moderate, etc.) associated with confidence in the scientific community in 1990 and 2012? Popular media often suggests that either conservatives or liberals don't trust the scientific community. I am curious to see if there is any association. 
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+First let's access the data, select the consci, polviews, and year columns, and drop NA values. Here are some summary statistics for each column:
+```{r}
+df <- gss %>% dplyr::select(year, consci, polviews) %>% drop_na() 
+summary(df)
+```
+Here we see that this dataset covers 1974 - 2012 and breaks up trust in the scientific community into three levels: 'A Great Deal', 'Only Some', and 'Hardly Any'. Political views are broken into seven levels, ranging from 'Extremely Liberal' to 'Extremely Conservative'.
+
+Next, I'll make a new dataframe, df_year, that groups the data by year, political spectrum, and views about the scientific community. The total counts and proportion of respondents is calculated within each sub-group:
+
+```{r}
+df_year <- df %>% group_by(year,polviews,consci) %>% 
+  summarise(n=n()) %>% mutate(Proportion = n / sum(n))  
+df_year
+```
+
+Now, I'll plot the results for self-identified moderates from 1974 - 2012:
+
+```{r}
+df_year %>% filter(polviews=='Moderate') %>% ggplot(aes(x=year,y=Proportion,color=consci)) +
+  geom_point() + 
+  geom_line() + 
+  xlab('Year') + 
+  ylab('Proportion') + 
+  labs(color = 'Level of Trust', 
+       title='US moderates\' trust in scientific community from 1974 - 2012')
+```
+
+It seems that the level of trust in the scientific community has been reasonably constant over this time frame with about 40% of respondents reporting 'A Great Deal'.
+
+Next, let's look at the results for self-identified conservatives:
+
+```{r}
+df_year %>% filter(polviews=='Conservative') %>% ggplot(aes(x=year,y=Proportion,color=consci)) +
+  geom_point() + 
+  geom_line() + 
+  xlab('Year') + 
+  ylab('Proportion') + 
+  labs(color = 'Level of Trust', 
+       title='US conservatives\' trust in scientific community from 1974 - 2012')
+```
+
+This plot looks a little more interesting. It seems to suggest that conservatives' trust in the scientific community was constant from 1974 - 2000, but it has been decreasing from 2000 - 2012.
+
+Finally, let's look at self-identified liberals:
+
+```{r}
+df_year %>% filter(polviews=='Liberal') %>% ggplot(aes(x=year,y=Proportion,color=consci)) +
+  geom_point() + 
+  geom_line() + 
+  xlab('Year') + 
+  ylab('Proportion') + 
+  labs(color = 'Level of Trust', 
+       title='US liberal\'s trust in scientific community from 1974 - 2012')
+```
+
+These results seem to be fairly constant over this time frame, although there may have been an increase in the 'Only Some' category around 2005.
+
+Let's take a more detailed look at the data for 2012. First, I'll collapse the trust levels into two categories: 'A Great Deal' and 'Not A Great Deal':
+```{r}
+df_collapsed <- df %>% filter(year==2012) %>%
+  mutate(Trust_Level = ifelse(consci=='A Great Deal',
+                          'A Great Deal',
+                          'Not A Great Deal')) %>% 
+  dplyr::select(polviews, Trust_Level)
+```
+
+
+Then, I group by self-identified political view and calculate the proportion in each sub-category:
+
+```{r}
+df_grouped <- df_collapsed %>% group_by(polviews,Trust_Level) %>% summarise(n=n()) %>% mutate(freq = n / sum(n)) 
+df_grouped
+```
+
+Now I'll plot the proportions for each of the categories:
+
+```{r}
+ggplot(df_grouped, aes(fill=Trust_Level, y=freq, x=polviews)) + 
+    geom_bar( stat="identity") + 
+  theme(axis.text.x = element_text(angle = 90)) + 
+    xlab('') + 
+  ylab('Proportion') + 
+  labs(color = 'Level of Trust', 
+       title='US trust in scientific community 2012 by politics')
+```
+
+This plot shows the highest levels of distrust among conservative and extremely conservative respondents. It is not monotonically changing over the political spectrum, however, as there are higher levels of moderates and extremely liberal respondents with not a great deal of trust in the scientific community.
+
+Now, let's do hypothesis testing of these data to see if there is a statistically significant association between these variables.
+
+* * *
+
+## Part 4: Inference
+
+The null and alternative hypothesis test for the research question are as follows:
+
+H~0~: Political views and trust in the scientific community are independent (not associated). 
+
+H~A~: Political views and trust in the scientific community are dependent (associated).
+
+I'll be testing this hypothesis for two years (1990 and 2012). I'll use a Bonferroni modified significance level of .05/2 = .025 since we are doing 2 comparisons.
+
+I am interested in seeing if there is an association between a 7 level and 2 level categorical variable, so the reduced chi squared test is the appropriate method. I will not be calculating the confidence interval, since one of the categorical variables has more than 2 levels. The chi squared value is calculated as the total sum of (observed - expected counts)^2/expected counts. Then, the total degrees of freedom are calculated as (number of rows-1)x(number of columns-1) in the 2-way table. Finally, the p-value is calculated as the upper tail of the calculated chi squared distribution for a particular number of degrees of freedom.
+   
+To carry out this test the data must meet two conditions: 
+
+1) Each respondent must be independent from the other respondents. I assume this to be true, based on the reported methodology of the GSS.
+
+2) Each bin must have 5 expected cases. Let's see if our data meet this requirement.
+
+
+First I'll take a look at the two way table for this scenario. Again, I'm dividing trust into 2 categories ('A Great Deal' and 'Not A Great Deal'):
+
+```{r}
+df_1990 <- df %>% filter(year==1990) %>% 
+  mutate(sciview = ifelse(consci=='A Great Deal',
+                          'A Great Deal',
+                          'Not A Great Deal'))
+tbl_1990 = table(df_1990$sciview, df_1990$polviews) 
+tbl_1990
+```
+Next, I need to calculate the expected counts if the null hypothesis is true (condition 2). I'll do this following the guide provided [here](https://www.cyclismo.org/tutorial/R/tables.html). Each value is calculated as the row total * column total/table total. If the data doesn't meet 5 expected counts condition, I'll need to run a simulation to calculate the p-value.
+
+```{r}
+as.array(margin.table(tbl_1990,1)) %*% t(as.array(margin.table(tbl_1990,2))) /
+  margin.table(tbl_1990)
+```
+All expected counts are above 5, so we can use the chi squared test on this data set. Now let's check for 2012: 
+
+```{r}
+df_2012 <- df %>% filter(year==2012) %>% 
+  mutate(sciview = ifelse(consci=='A Great Deal',
+                          'A Great Deal',
+                          'Not A Great Deal'))
+tbl_2012 = table(df_2012$sciview, df_2012$polviews) 
+as.array(margin.table(tbl_2012,1)) %*% t(as.array(margin.table(tbl_2012,2))) /
+  margin.table(tbl_2012)
+```
+These are also all above 5 counts, so the chi squared test is appropriate. No simulations are needed. I can now proceed with the chi squared test for 1990:
+
+```{r}
+chisq.test(tbl_1990)
+```
+In this case p=0.18, which is greater than our significance value of .025. So, I fail to reject the null hypothesis. In other words, the data do not provide convincing evidence that self-identified political affiliation and trust in the scientific community were associated in 1990.
+
+Now let's perform the chi squared test for 2012:
+
+```{r}
+chisq.test(tbl_2012)
+```
+
+In this case, p=.021, which is smaller than .025. I reject the null hypothesis in favor of the alternative hypothesis. Specifically, the self-identified political affiliation and trust in the scientific community among Americans were associated (dependent) in the year 2012. This test doesn't say anything about how they were associated, however, only that they are associated. To answer the question of how they are associated we would need to do further tests.
