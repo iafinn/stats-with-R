@@ -1,5 +1,5 @@
 ## Description
-A couple smaller stats projects using R for the "Statistics with R" specialization on Coursera from Duke U.
+A couple smaller stats projects that I did for the "Statistics with R" specialization on Coursera from Duke U.
 
 ## Directory Overview
 ```
